@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use anyhow::Result;
-use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
+use webrtc::ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateInit};
+use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 // Re-export для удобства
@@ -16,7 +17,7 @@ pub trait Sfu: Send + Sync {
 
     async fn remove_publisher(&self, publisher_id: &str) -> Result<()>;
 
-    async fn add_publisher_ice(&self, publisher_id: &str, candidate: RTCIceCandidate) -> Result<()>;
+    async fn add_publisher_ice(&self, publisher_id: &str, candidate: RTCIceCandidateInit) -> Result<()>;
 
     async fn add_subscriber(&self, req: SubscriberRequest) -> Result<SubscriberResponse>;
 
@@ -24,11 +25,13 @@ pub trait Sfu: Send + Sync {
 
     async fn remove_subscriber(&self, subscriber_id: &str) -> Result<()>;
 
-    async fn add_subscriber_ice(&self, subscriber_id: &str, candidate: RTCIceCandidate) -> Result<()>;
+    async fn add_subscriber_ice(&self, subscriber_id: &str, candidate: RTCIceCandidateInit) -> Result<()>;
 
     async fn get_metrics(&self) -> Result<sfu_proto::SfuMetrics>;
 
     async fn health_check(&self) -> Result<()>;
+
+    async fn get_rtc_config(&self) -> RTCConfiguration;
 }
 
 #[derive(Debug)]

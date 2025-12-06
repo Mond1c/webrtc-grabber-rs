@@ -38,4 +38,8 @@ impl SfuConfig {
             .context("Failed to parse YAML config")?;
         Ok(config)
     }
+
+    pub fn validate_credentials(&self, creds: &str) -> bool {
+        true // Placeholder
+    }
 }

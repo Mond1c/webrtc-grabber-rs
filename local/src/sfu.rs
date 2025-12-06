@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use sfu_proto::SfuMetrics;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
-use webrtc::{api::{API, APIBuilder, interceptor_registry::register_default_interceptors, media_engine::MediaEngine}, ice_transport::{ice_candidate::RTCIceCandidate, ice_server::RTCIceServer}, interceptor::registry::Registry, peer_connection::{RTCPeerConnection, configuration::RTCConfiguration}, rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTCRtpCodecParameters, RTPCodecType}, track::track_local::{TrackLocal, track_local_static_rtp::TrackLocalStaticRTP}};
+use webrtc::{api::{API, APIBuilder, interceptor_registry::register_default_interceptors, media_engine::MediaEngine}, ice_transport::{ice_candidate::{RTCIceCandidate, RTCIceCandidateInit}, ice_server::RTCIceServer}, interceptor::registry::Registry, peer_connection::{RTCPeerConnection, configuration::RTCConfiguration}, rtp_transceiver::rtp_codec::{RTCRtpCodecCapability, RTCRtpCodecParameters, RTPCodecType}, track::track_local::{TrackLocal, track_local_static_rtp::TrackLocalStaticRTP}};
 
 use crate::{broadcaster::TrackBroadcaster, config::SfuConfig};
 
@@ -283,17 +283,27 @@ impl Sfu for LocalSfu {
         Ok(())
     }
 
-    async fn add_publisher_ice(&self, publisher_id: &str, candidate: RTCIceCandidate) -> Result<()> {
-        if let Some(session) = self.publishers.get(publisher_id) {
-            session.pc.add_ice_candidate(candidate.to_json()?).await?;
-        }
+    async fn add_publisher_ice(&self, publisher_id: &str, candidate: RTCIceCandidateInit) -> Result<()> {
+        let session = self.publishers.get(publisher_id)
+            .ok_or_else(|| anyhow!("Publisher not found for ICE: {}", publisher_id))?;
+        
+        info!("Adding ICE candidate for publisher {}", publisher_id);
+        
+        session.pc.add_ice_candidate(candidate).await
+            .context("Failed to add ICE candidate to publisher PC")?;
+            
         Ok(())
     }
 
-    async fn add_subscriber_ice(&self, subscriber_id: &str, candidate: RTCIceCandidate) -> Result<()> {
-        if let Some(session) = self.subscribers.get(subscriber_id) {
-            session.pc.add_ice_candidate(candidate.to_json()?).await?;
-        }
+    async fn add_subscriber_ice(&self, subscriber_id: &str, candidate: RTCIceCandidateInit) -> Result<()> {
+        let session = self.subscribers.get(subscriber_id)
+            .ok_or_else(|| anyhow!("Subscriber not found for ICE: {}", subscriber_id))?;
+            
+        info!("Adding ICE candidate for subscriber {}", subscriber_id);
+
+        session.pc.add_ice_candidate(candidate).await
+            .context("Failed to add ICE candidate to subscriber PC")?;
+            
         Ok(())
     }
 
@@ -307,5 +317,9 @@ impl Sfu for LocalSfu {
 
     async fn update_subscriber(&self, _req: SubscriberUpdateRequest) -> Result<SubscriberUpdateResponse> {
         Ok(SubscriberUpdateResponse { success: true })
+    }
+
+    async fn get_rtc_config(&self) -> RTCConfiguration {
+        self.get_rtc_config()
     }
 }
