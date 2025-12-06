@@ -1,0 +1,189 @@
+syntax = "proto3";
+
+package sfu;
+
+option go_package = "github.com/irdkwmnsb/webrtc-grabber/packages/relay/proto/sfu";
+
+service SfuService {
+  rpc AddPublisher(AddPublisherRequest) returns (AddPublisherResponse);
+
+  rpc DeletePublisher(DeletePublisherRequest) returns (DeletePublisherResponse);
+
+  rpc UpdatePublisher(UpdatePublisherRequest) returns (UpdatePublisherResponse);
+
+  rpc AddPublisherIce(AddIceCandidateRequest) returns (AddIceCandidateResponse);
+
+  rpc SubscribePublisherEvents(SubscribePublisherEventsRequest)
+      returns (stream PublisherEvent);
+
+  rpc AddSubscriber(AddSubscriberRequest) returns (AddSubscriberResponse);
+
+  rpc DeleteSubscriber(DeleteSubscriberRequest)
+      returns (DeleteSubscriberResponse);
+
+  rpc UpdateSubscriber(UpdateSubscriberRequest)
+      returns (UpdateSubscriberResponse);
+
+  rpc AddSubscriberIce(AddIceCandidateRequest)
+      returns (AddIceCandidateResponse);
+
+  rpc SubscribeSubscriberEvents(SubscribeSubscriberEventsRequest)
+      returns (stream SubscriberEvent);
+
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ============================================================================
+// Common Types
+// ============================================================================
+
+message SessionDescription {
+  string type = 1;
+  string sdp = 2;
+}
+
+message IceCandidate {
+  string candidate = 1;
+  string sdp_mid = 2;
+  uint32 sdp_m_line_index = 3;
+  string username_fragment = 4;
+}
+
+// ============================================================================
+// Requests / Responses
+// ============================================================================
+
+message AddPublisherRequest {
+  string publisher_id = 1;
+  string stream_type = 2;
+  SessionDescription offer = 3;
+}
+
+message AddPublisherResponse {
+  string publisher_key = 1;
+  SessionDescription answer = 2;
+  int32 track_count = 3;
+}
+
+message DeletePublisherRequest { string publisher_key = 1; }
+
+message DeletePublisherResponse { bool success = 1; }
+
+message UpdatePublisherRequest {
+  string publisher_key = 1;
+  SessionDescription offer = 2;
+}
+
+message UpdatePublisherResponse {
+  SessionDescription answer = 1;
+  bool success = 2;
+}
+
+message AddSubscriberRequest {
+  string subscriber_id = 1;
+  string publisher_key = 2;
+  string stream_type = 3;
+  SessionDescription offer = 4;
+}
+
+message AddSubscriberResponse {
+  SessionDescription answer = 1;
+  int32 track_count = 2;
+}
+
+message DeleteSubscriberRequest { string subscriber_id = 1; }
+
+message DeleteSubscriberResponse { bool success = 1; }
+
+message UpdateSubscriberRequest {
+  string subscriber_id = 1;
+  bool mute_video = 2;
+  bool mute_audio = 3;
+}
+
+message UpdateSubscriberResponse { bool success = 1; }
+
+message AddIceCandidateRequest {
+  string session_id = 1;
+  IceCandidate candidate = 2;
+}
+
+message AddIceCandidateResponse { bool success = 1; }
+
+// ============================================================================
+// Events (Streaming)
+// ============================================================================
+
+message SubscribePublisherEventsRequest { string publisher_key = 1; }
+
+message PublisherEvent {
+  oneof payload {
+    IceCandidate ice_candidate = 1;
+    string connection_state = 2;
+    TrackInfo track_added = 3;
+    string error = 4;
+  }
+}
+
+message SubscribeSubscriberEventsRequest { string subscriber_id = 1; }
+
+message SubscriberEvent {
+  oneof payload {
+    IceCandidate ice_candidate = 1;
+    string connection_state = 2;
+    string error = 3;
+  }
+}
+
+message TrackInfo {
+  string track_id = 1;
+  string stream_id = 2;
+  string kind = 3;
+  string codec = 4;
+}
+
+// ============================================================================
+// Metrics & Health
+// ============================================================================
+
+message GetMetricsRequest {}
+
+message GetMetricsResponse { SfuMetrics metrics = 1; }
+
+message SfuMetrics {
+  string instance_id = 1;
+  int64 timestamp_ms = 2;
+
+  double cpu_usage = 3;
+  uint64 memory_usage = 4;
+  uint64 memory_total = 5;
+  int32 go_routines = 6;
+  uint64 uptime_seconds = 7;
+
+  int32 publisher_count = 8;
+  int32 subscriber_count = 9;
+  int32 track_count = 10;
+
+  uint64 total_bitrate_bps = 11;
+  uint64 bytes_received = 12;
+  uint64 bytes_sent = 13;
+  uint64 packets_received = 14;
+  uint64 packets_sent = 15;
+  uint64 packets_lost = 16;
+
+  int64 rtt_ms = 17;
+  uint64 nack_count = 18;
+  uint64 pli_count = 19;
+  uint64 fir_count = 20;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string message = 2;
+}
+
+message GetInstanceInfoRequest {}
