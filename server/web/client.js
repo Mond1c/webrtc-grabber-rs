@@ -324,6 +324,29 @@ class Viewer {
         this.pc.addTransceiver('audio', { direction: 'recvonly' });
 
         const offer = await this.pc.createOffer();
+
+        let sdp = offer.sdp;
+
+        const videoLines = sdp.split('\r\n').filter(line => line.startsWith('m=video'));
+        if (videoLines.length > 0) {
+            const videoLine = videoLines[0];
+            const parts = videoLine.split(' ');
+            const payloads = parts.slice(3);
+
+            const h264Payload = sdp.split('\r\n')
+                .find(line => line.includes('rtpmap') && line.toLowerCase().includes('h264'))
+                ?.match(/a=rtpmap:(\d+)/)?.[1];
+
+            if (h264Payload && payloads.includes(h264Payload)) {
+                const reordered = [h264Payload, ...payloads.filter(p => p !== h264Payload)];
+                const newVideoLine = parts.slice(0, 3).join(' ') + ' ' + reordered.join(' ');
+                sdp = sdp.replace(videoLine, newVideoLine);
+
+                this.logger.log(`Reordered codecs to prefer H.264 (payload ${h264Payload})`);
+            }
+        }
+
+        offer.sdp = sdp;
         await this.pc.setLocalDescription(offer);
 
         this.ws.send(JSON.stringify({

@@ -16,6 +16,7 @@ pub struct TrackBroadcaster {
     pub id: String,
     pub kind: String,
     pub mime_type: String,
+    pub codec_capability: webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability,
     pub ssrc: u32,
     tx: broadcast::Sender<Arc<Packet>>,
     read_task: JoinHandle<()>,
@@ -31,6 +32,7 @@ impl TrackBroadcaster {
         source_track: Arc<TrackRemote>,
         peer_connection: Arc<RTCPeerConnection>,
         mime_type: String,
+        codec_capability: webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability,
         channel_capacity: usize,
     ) -> Self {
         let id = source_track.id().to_string();
@@ -105,6 +107,7 @@ impl TrackBroadcaster {
             id,
             kind,
             mime_type,
+            codec_capability,
             ssrc,
             tx,
             read_task,

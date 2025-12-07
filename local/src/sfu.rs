@@ -251,25 +251,31 @@ impl Sfu for LocalSfu {
                 let kind = track.kind();
 
                 let params = receiver.get_parameters().await;
-                let mime_type = if let Some(codec) = params.codecs.first() {
-                    codec.capability.mime_type.clone()
+                let (mime_type, codec_capability) = if let Some(codec) = params.codecs.first() {
+                    (codec.capability.mime_type.clone(), codec.capability.clone())
                 } else {
-                    match kind.to_string().as_str() {
+                    let default_mime = match kind.to_string().as_str() {
                         "video" => "video/VP8".to_string(),
                         "audio" => "audio/opus".to_string(),
                         _ => format!("{}/unknown", kind),
-                    }
+                    };
+                    let default_capability = RTCRtpCodecCapability {
+                        mime_type: default_mime.clone(),
+                        ..Default::default()
+                    };
+                    (default_mime, default_capability)
                 };
 
                 info!(
-                    "Publisher {} added track: {} ({}, codec: {})",
-                    pub_id, track_id, kind, mime_type
+                    "Publisher {} added track: {} ({}, codec: {}, fmtp: '{}')",
+                    pub_id, track_id, kind, mime_type, codec_capability.sdp_fmtp_line
                 );
 
                 let broadcaster = Arc::new(TrackBroadcaster::new(
                     track,
                     pc_for_broadcaster,
                     mime_type,
+                    codec_capability,
                     channel_capacity,
                 ));
                 session.add_broadcaster(track_id.to_string(), broadcaster);
@@ -377,10 +383,7 @@ impl Sfu for LocalSfu {
             let local_track_id = format!("{}-{}", original_track_id, req.subscriber_id);
 
             let local_track = Arc::new(TrackLocalStaticRTP::new(
-                RTCRtpCodecCapability {
-                    mime_type: broadcaster.mime_type.clone(),
-                    ..Default::default()
-                },
+                broadcaster.codec_capability.clone(),
                 local_track_id.clone(),
                 format!("stream-{}", req.publisher_id),
             ));

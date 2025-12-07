@@ -6,11 +6,12 @@ members = [
     "remote",
     "balancer",
     "server",
+    "grabber-client",
 ]
 resolver = "2"
 
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
+codegen-units = 16
 panic = "abort"
 opt-level = 3

@@ -1,0 +1,1 @@
+export DYLD_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_LIBRARY_PATH" && ./target/release/grabber-client webcam --url ws://localhost:8080/grabber/001 --camera 0 --width 1280 --height 720 --fps 30
