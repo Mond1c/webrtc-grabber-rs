@@ -49,15 +49,15 @@ impl GStreamerWebcam {
             "ksvideosrc device-index={} ! \
              video/x-raw,width={},height={},framerate={}/1 ! \
              videoconvert ! \
-             nvh264enc bitrate={} gop-size={} ! \
-             h264parse ! \
+             mfh264enc bitrate={} gop-size={} ! \
+             h264parse config-interval=1 ! \
              video/x-h264,stream-format=byte-stream,alignment=au ! \
-             appsink name=sink sync=false",
+             appsink name=sink sync=false emit-signals=true",
             camera_index,
             width,
             height,
             fps,
-            3000,
+            15000,
             fps * 2
         );
 
