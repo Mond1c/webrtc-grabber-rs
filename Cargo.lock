@@ -2157,6 +2157,7 @@ dependencies = [
  "serde_yaml",
  "sfu-core",
  "sfu-proto",
+ "thiserror",
  "tokio",
  "tracing",
  "uuid",

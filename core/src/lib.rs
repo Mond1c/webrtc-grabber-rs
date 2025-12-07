@@ -30,8 +30,6 @@ pub trait Sfu: Send + Sync {
     async fn get_metrics(&self) -> Result<sfu_proto::SfuMetrics>;
 
     async fn health_check(&self) -> Result<()>;
-
-    async fn get_rtc_config(&self) -> RTCConfiguration;
 }
 
 #[derive(Debug)]
