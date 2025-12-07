@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use sfu_core::Sfu;
 use sfu_local::{LocalSfu, SfuConfig};
-use webrtc_grabber_rs_server::{AppState, start_server};
+use webrtc_grabber_rs_server::{start_server, AppState};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -44,19 +44,15 @@ fn create_default_config() -> SfuConfig {
             bind_address: "0.0.0.0:8080".to_string(),
             enable_metrics: true,
         },
-        ice_servers: vec![
-            "stun:stun.l.google.com:19302".to_string(),
-        ],
+        ice_servers: vec![],
         codecs: CodecsConfig {
-            audio: vec![
-                CodecItem {
-                    mime: "audio/opus".to_string(),
-                    payload_type: 111,
-                    clock_rate: 48000,
-                    channels: Some(2),
-                    sdp_fmtp: Some("minptime=10;useinbandfec=1".to_string()),
-                },
-            ],
+            audio: vec![CodecItem {
+                mime: "audio/opus".to_string(),
+                payload_type: 111,
+                clock_rate: 48000,
+                channels: Some(2),
+                sdp_fmtp: Some("minptime=10;useinbandfec=1".to_string()),
+            }],
             video: vec![
                 CodecItem {
                     mime: "video/VP8".to_string(),
@@ -70,7 +66,10 @@ fn create_default_config() -> SfuConfig {
                     payload_type: 102,
                     clock_rate: 90000,
                     channels: None,
-                    sdp_fmtp: Some("level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f".to_string()),
+                    sdp_fmtp: Some(
+                        "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f"
+                            .to_string(),
+                    ),
                 },
             ],
         },

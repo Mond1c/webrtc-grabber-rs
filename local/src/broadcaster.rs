@@ -96,7 +96,7 @@ impl TrackBroadcaster {
                 if let Err(e) = pc_for_pli.write_rtcp(&[Box::new(pli)]).await {
                     warn!("Failed to send PLI for track {}: {}", pli_track_id, e);
                 } else {
-                    info!("Sent PLI for track {} (SSRC: {})", pli_track_id, ssrc);
+                    trace!("Sent PLI for track {} (SSRC: {})", pli_track_id, ssrc);
                 }
             }
         });
@@ -130,7 +130,7 @@ impl TrackBroadcaster {
         tokio::spawn(async move {
             for i in 0..3 {
                 let _ = pli_tx.send(());
-                info!("Sent PLI request #{} for new subscriber", i + 1);
+                trace!("Sent PLI request #{} for new subscriber", i + 1);
 
                 if i < 2 {
                     tokio::time::sleep(Duration::from_millis(300)).await;

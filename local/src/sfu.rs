@@ -266,8 +266,12 @@ impl Sfu for LocalSfu {
                     pub_id, track_id, kind, mime_type
                 );
 
-                let broadcaster =
-                    Arc::new(TrackBroadcaster::new(track, pc_for_broadcaster, mime_type, channel_capacity));
+                let broadcaster = Arc::new(TrackBroadcaster::new(
+                    track,
+                    pc_for_broadcaster,
+                    mime_type,
+                    channel_capacity,
+                ));
                 session.add_broadcaster(track_id.to_string(), broadcaster);
             })
         }));
@@ -367,10 +371,10 @@ impl Sfu for LocalSfu {
         }
 
         let broadcasters = pub_session.get_all_broadcasters();
-        let mut created_track_ids = Vec::with_capacity(broadcasters.len());
+        let mut track_mapping = Vec::with_capacity(broadcasters.len());
 
         for (original_track_id, broadcaster) in broadcasters {
-            let local_track_id = original_track_id.clone();
+            let local_track_id = format!("{}-{}", original_track_id, req.subscriber_id);
 
             let local_track = Arc::new(TrackLocalStaticRTP::new(
                 RTCRtpCodecCapability {
@@ -381,12 +385,39 @@ impl Sfu for LocalSfu {
                 format!("stream-{}", req.publisher_id),
             ));
 
-            pc.add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
+            let rtp_sender = pc
+                .add_track(Arc::clone(&local_track) as Arc<dyn TrackLocal + Send + Sync>)
                 .await
                 .map_err(|e| SfuError::AddTrack(e.to_string()))?;
 
+            let broadcaster_for_rtcp = Arc::clone(&broadcaster);
+            let track_kind = broadcaster.kind.clone();
+            tokio::spawn(async move {
+                use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
+                use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+
+                let mut rtcp_buf = vec![0u8; 1500];
+                while let Ok((packets, _)) = rtp_sender.read(&mut rtcp_buf).await {
+                    if track_kind != "video" {
+                        continue;
+                    }
+
+                    for packet in packets {
+                        if packet
+                            .as_any()
+                            .downcast_ref::<PictureLossIndication>()
+                            .is_some()
+                            || packet.as_any().downcast_ref::<FullIntraRequest>().is_some()
+                        {
+                            broadcaster_for_rtcp.request_keyframe();
+                            break;
+                        }
+                    }
+                }
+            });
+
             broadcaster.add_subscriber(local_track).await;
-            created_track_ids.push(local_track_id);
+            track_mapping.push((original_track_id, local_track_id));
         }
 
         pc.set_remote_description(req.offer)
@@ -405,7 +436,7 @@ impl Sfu for LocalSfu {
         let sub_session = Arc::new(SubscriberSession::new(
             pc,
             req.publisher_id.clone(),
-            created_track_ids,
+            track_mapping,
         ));
 
         self.subscribers.insert(req.subscriber_id, sub_session);
@@ -419,9 +450,9 @@ impl Sfu for LocalSfu {
             info!("Removing subscriber: {}", subscriber_id);
 
             if let Some(pub_session) = self.publishers.get(&session.publisher_id) {
-                for track_id in &session.subscribed_track_ids {
-                    if let Some(broadcaster) = pub_session.get_broadcaster(track_id) {
-                        broadcaster.remove_subscriber(track_id).await;
+                for (original_track_id, local_track_id) in &session.track_mapping {
+                    if let Some(broadcaster) = pub_session.get_broadcaster(original_track_id) {
+                        broadcaster.remove_subscriber(local_track_id).await;
                     }
                 }
             }

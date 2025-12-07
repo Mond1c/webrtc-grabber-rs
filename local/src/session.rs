@@ -48,15 +48,19 @@ impl Drop for PublisherSession {
 pub struct SubscriberSession {
     pub pc: Arc<RTCPeerConnection>,
     pub publisher_id: String,
-    pub subscribed_track_ids: Vec<String>,
+    pub track_mapping: Vec<(String, String)>,
 }
 
 impl SubscriberSession {
-    pub fn new(pc: Arc<RTCPeerConnection>, publisher_id: String, track_ids: Vec<String>) -> Self {
+    pub fn new(
+        pc: Arc<RTCPeerConnection>,
+        publisher_id: String,
+        track_mapping: Vec<(String, String)>,
+    ) -> Self {
         Self {
             pc,
             publisher_id,
-            subscribed_track_ids: track_ids,
+            track_mapping,
         }
     }
 }
