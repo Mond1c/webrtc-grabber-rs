@@ -239,10 +239,12 @@ impl Sfu for LocalSfu {
         let session_clone = Arc::clone(&session);
         let pub_id = req.publisher_id.clone();
         let channel_capacity = self.config.performance.broadcast_channel_capacity;
+        let pc_for_pli = Arc::clone(&pc);
 
         pc.on_track(Box::new(move |track, receiver, _| {
             let session = Arc::clone(&session_clone);
             let pub_id = pub_id.clone();
+            let pc_for_broadcaster = Arc::clone(&pc_for_pli);
 
             Box::pin(async move {
                 let track_id = track.id();
@@ -265,7 +267,7 @@ impl Sfu for LocalSfu {
                 );
 
                 let broadcaster =
-                    Arc::new(TrackBroadcaster::new(track, mime_type, channel_capacity));
+                    Arc::new(TrackBroadcaster::new(track, pc_for_broadcaster, mime_type, channel_capacity));
                 session.add_broadcaster(track_id.to_string(), broadcaster);
             })
         }));
