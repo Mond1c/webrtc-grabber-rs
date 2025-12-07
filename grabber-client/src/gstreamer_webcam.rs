@@ -46,7 +46,7 @@ impl GStreamerWebcam {
 
         #[cfg(target_os = "windows")]
         let pipeline_str = format!(
-            "ksvideosrc device-index={} ! \
+            "mfvideosrc device-index={} ! \
              video/x-raw,width={},height={},framerate={}/1 ! \
              videoconvert ! \
              mfh264enc bitrate={} gop-size={} ! \
