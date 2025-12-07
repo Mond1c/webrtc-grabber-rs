@@ -825,7 +825,7 @@
                 <div class="stat-header">
                     <div>
                         <div class="stat-value" id="totalBitrate">0</div>
-                        <div class="stat-label">Total Bitrate (kbps)</div>
+                        <div class="stat-label">Avg Bitrate (kbps)</div>
                     </div>
                     <div class="stat-icon purple">📊</div>
                 </div>
@@ -938,8 +938,8 @@
                             <tr>
                                 <th>Peer Name</th>
                                 <th>Type</th>
-                                <th>Stream Count</th>
-                                <th>Status</th>
+                                <th>Tracks</th>
+                                <th>Viewing Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -1061,28 +1061,20 @@
             </div>
 
             <div class="chart-container">
-                <div style="text-align: center;">
-                    <h3 style="margin-bottom: 8px; color: var(--text-secondary);">📈 Stream Activity Chart</h3>
-                    <p>Advanced analytics coming soon</p>
-                </div>
+                <canvas id="chart-activity"></canvas>
             </div>
 
             <div class="chart-container">
-                <div style="text-align: center;">
-                    <h3 style="margin-bottom: 8px; color: var(--text-secondary);">📊 Bandwidth Usage</h3>
-                    <p>Advanced analytics coming soon</p>
-                </div>
+                <canvas id="chart-bandwidth"></canvas>
             </div>
 
             <div class="chart-container">
-                <div style="text-align: center;">
-                    <h3 style="margin-bottom: 8px; color: var(--text-secondary);">👥 Peer Connections</h3>
-                    <p>Advanced analytics coming soon</p>
-                </div>
+                <canvas id="chart-viewers"></canvas>
             </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="client.js"></script>
 </body>
 </html>

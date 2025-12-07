@@ -369,21 +369,39 @@ class Viewer {
             clearInterval(this.statsInterval);
         }
 
+        // Track previous bytes for bitrate calculation
+        this.lastBytes = null;
+        this.lastTimestamp = null;
+
         this.statsInterval = setInterval(async () => {
             if (!this.pc) return;
 
             const stats = await this.pc.getStats();
-            let bitrate = 0;
+            let totalBytes = 0;
             let packets = 0;
+            const now = Date.now();
 
             stats.forEach(report => {
                 if (report.type === 'inbound-rtp') {
-                    bitrate += (report.bytesReceived * 8) / 1000;
+                    totalBytes += report.bytesReceived || 0;
                     packets += report.packetsReceived || 0;
                 }
             });
 
-            this.onStatusChange(this.peerName, 'stats', { bitrate: Math.round(bitrate), packets });
+            // Calculate bitrate from byte difference
+            let bitrate = 0;
+            if (this.lastBytes !== null && this.lastTimestamp !== null) {
+                const bytesDiff = totalBytes - this.lastBytes;
+                const timeDiff = (now - this.lastTimestamp) / 1000; // seconds
+                if (timeDiff > 0) {
+                    bitrate = Math.round((bytesDiff * 8) / timeDiff / 1000); // kbps
+                }
+            }
+
+            this.lastBytes = totalBytes;
+            this.lastTimestamp = now;
+
+            this.onStatusChange(this.peerName, 'stats', { bitrate, packets });
         }, 1000);
     }
 
@@ -530,11 +548,22 @@ class UIController {
         setInterval(() => {
             this.refreshPeers(true);
             this.fetchPeerCount();
+
+            // Update peers table if on peers page
+            if (this.currentPage === 'peers') {
+                this.loadPeersTable();
+            }
+
+            // Update analytics if on analytics page
+            if (this.currentPage === 'analytics') {
+                this.updateAnalyticsStats();
+            }
         }, 5000);
 
         // Initial stats update
         this.fetchPeerCount();
         this.updateGlobalStats();
+        this.fetchServerConfig();
 
         this.logger.log('WebRTC SFU Admin Panel initialized');
         this.logger.log(`Server: ${WS_URL}`);
@@ -732,15 +761,21 @@ class UIController {
         // Update total streams
         document.getElementById('totalStreams').textContent = this.viewers.size;
 
-        // Calculate total bitrate
+        // Calculate average bitrate (not sum!)
         let totalBitrate = 0;
+        let activeViewers = 0;
         for (const peerName of this.viewers.keys()) {
             const bitrateEl = document.getElementById(`bitrate-${peerName}`);
             if (bitrateEl) {
-                totalBitrate += parseInt(bitrateEl.textContent) || 0;
+                const bitrate = parseInt(bitrateEl.textContent) || 0;
+                if (bitrate > 0) {
+                    totalBitrate += bitrate;
+                    activeViewers++;
+                }
             }
         }
-        document.getElementById('totalBitrate').textContent = totalBitrate;
+        const avgBitrate = activeViewers > 0 ? Math.round(totalBitrate / activeViewers) : 0;
+        document.getElementById('totalBitrate').textContent = avgBitrate;
     }
 
     async fetchPeerCount() {
@@ -780,27 +815,51 @@ class UIController {
                 return;
             }
 
-            tbody.innerHTML = data.peers.map(peer => `
-                <tr>
-                    <td><strong>${peer.name}</strong></td>
-                    <td>
-                        <span class="peer-badge publisher">Publisher</span>
-                    </td>
-                    <td>${peer.tracks.length}</td>
-                    <td>
-                        <span class="status-badge connected">
-                            <div class="status-dot"></div>
-                            Connected
-                        </span>
-                    </td>
-                    <td>
-                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="uiController.watchPeer('${peer.name}')">
-                            <span>👁️</span>
-                            <span>Watch</span>
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = data.peers.map(peer => {
+                // Use stream_types from API (which contains track kinds)
+                const streamTypes = peer.streamTypes || peer.stream_types || [];
+
+                const trackInfo = [];
+                const videoCount = streamTypes.filter(t => t === 'video').length;
+                const audioCount = streamTypes.filter(t => t === 'audio').length;
+
+                if (videoCount > 0) {
+                    trackInfo.push(`🎥 ${videoCount} video`);
+                }
+                if (audioCount > 0) {
+                    trackInfo.push(`🎤 ${audioCount} audio`);
+                }
+                const trackText = trackInfo.length > 0 ? trackInfo.join(', ') : 'No tracks';
+
+                // Check if currently watching this peer
+                const isWatching = this.viewers.has(peer.name);
+                const watchButton = isWatching
+                    ? `<button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="uiController.stopViewer('${peer.name}')">
+                        <span>⏹️</span>
+                        <span>Stop</span>
+                    </button>`
+                    : `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="uiController.watchPeer('${peer.name}')">
+                        <span>👁️</span>
+                        <span>Watch</span>
+                    </button>`;
+
+                return `
+                    <tr>
+                        <td><strong>${peer.name}</strong></td>
+                        <td>
+                            <span class="peer-badge publisher">Publisher</span>
+                        </td>
+                        <td>${trackText}</td>
+                        <td>
+                            <span class="status-badge ${isWatching ? 'connected' : 'disconnected'}">
+                                <div class="status-dot"></div>
+                                ${isWatching ? 'Watching' : 'Not watching'}
+                            </span>
+                        </td>
+                        <td>${watchButton}</td>
+                    </tr>
+                `;
+            }).join('');
         } catch (error) {
             this.logger.error(`Failed to load peers table: ${error.message}`);
         }
@@ -830,23 +889,196 @@ class UIController {
         }
     }
 
-    updateAnalyticsStats() {
+    async updateAnalyticsStats() {
         // Update analytics stats with current data
         document.getElementById('analyticsStreams').textContent = this.viewers.size;
-        document.getElementById('analyticsPeaks').textContent = this.viewers.size;
+
+        // Fetch health data
+        try {
+            const healthRes = await fetch('/api/health');
+            const healthData = await healthRes.json();
+
+            // Peak concurrent streams = current publishers
+            document.getElementById('analyticsPeaks').textContent = healthData.publishers;
+
+            // Track historical peak
+            if (!this.peakPublishers || healthData.publishers > this.peakPublishers) {
+                this.peakPublishers = healthData.publishers;
+            }
+
+            // Update stats history for charts
+            if (!this.statsHistory) {
+                this.statsHistory = {
+                    timestamps: [],
+                    viewers: [],
+                    publishers: [],
+                    bitrates: []
+                };
+            }
+
+            const now = new Date().toLocaleTimeString();
+            this.statsHistory.timestamps.push(now);
+            this.statsHistory.viewers.push(this.viewers.size);
+            this.statsHistory.publishers.push(healthData.publishers);
+
+            // Keep only last 20 data points
+            if (this.statsHistory.timestamps.length > 20) {
+                this.statsHistory.timestamps.shift();
+                this.statsHistory.viewers.shift();
+                this.statsHistory.publishers.shift();
+                this.statsHistory.bitrates.shift();
+            }
+
+        } catch (error) {
+            // Silently fail
+        }
 
         let totalBitrate = 0;
+        let activeViewers = 0;
         for (const peerName of this.viewers.keys()) {
             const bitrateEl = document.getElementById(`bitrate-${peerName}`);
             if (bitrateEl) {
-                totalBitrate += parseInt(bitrateEl.textContent) || 0;
+                const bitrate = parseInt(bitrateEl.textContent) || 0;
+                if (bitrate > 0) {
+                    totalBitrate += bitrate;
+                    activeViewers++;
+                }
             }
         }
-        const avgBitrate = this.viewers.size > 0 ? Math.round(totalBitrate / this.viewers.size) : 0;
+        const avgBitrate = activeViewers > 0 ? Math.round(totalBitrate / activeViewers) : 0;
         document.getElementById('analyticsAvgBitrate').textContent = avgBitrate;
 
-        // Uptime (placeholder)
-        document.getElementById('analyticsUptime').textContent = '24h';
+        if (this.statsHistory) {
+            this.statsHistory.bitrates.push(totalBitrate);
+        }
+
+        // Calculate uptime from when page was loaded
+        if (!this.startTime) {
+            this.startTime = Date.now();
+        }
+        const uptimeMs = Date.now() - this.startTime;
+        const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
+        const uptimeMinutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+        document.getElementById('analyticsUptime').textContent = `${uptimeHours}h ${uptimeMinutes}m`;
+
+        // Update charts if on analytics page
+        if (this.currentPage === 'analytics') {
+            this.renderAnalyticsCharts();
+        }
+    }
+
+    renderAnalyticsCharts() {
+        if (!this.statsHistory || this.statsHistory.timestamps.length === 0) {
+            return;
+        }
+
+        const timestamps = this.statsHistory.timestamps.map(t => t.split(':').slice(1).join(':'));
+
+        // Common chart options
+        const createChartConfig = (label, data, color) => ({
+            type: 'line',
+            data: {
+                labels: timestamps,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    borderColor: color,
+                    backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#1a1d29',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#9ca3af',
+                            font: { size: 12 }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1a1d29',
+                        titleColor: '#f3f4f6',
+                        bodyColor: '#9ca3af',
+                        borderColor: '#374151',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#374151',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: { size: 11 }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: '#374151',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#9ca3af',
+                            font: { size: 11 },
+                            maxRotation: 0
+                        }
+                    }
+                }
+            }
+        });
+
+        // Destroy old charts if they exist
+        if (this.charts) {
+            Object.values(this.charts).forEach(chart => chart.destroy());
+        }
+        this.charts = {};
+
+        // Create charts
+        const activityCtx = document.getElementById('chart-activity').getContext('2d');
+        this.charts.activity = new Chart(activityCtx, createChartConfig(
+            'Active Publishers',
+            this.statsHistory.publishers,
+            '#a78bfa'
+        ));
+
+        const bandwidthCtx = document.getElementById('chart-bandwidth').getContext('2d');
+        this.charts.bandwidth = new Chart(bandwidthCtx, createChartConfig(
+            'Total Bandwidth (kbps)',
+            this.statsHistory.bitrates,
+            '#34d399'
+        ));
+
+        const viewersCtx = document.getElementById('chart-viewers').getContext('2d');
+        this.charts.viewers = new Chart(viewersCtx, createChartConfig(
+            'Active Viewers',
+            this.statsHistory.viewers,
+            '#60a5fa'
+        ));
+    }
+
+    async fetchServerConfig() {
+        try {
+            const response = await fetch('/api/health');
+            const data = await response.json();
+            this.logger.log(`Connected to SFU: ${data.sfu_id}`);
+            this.logger.log(`Publishers: ${data.publishers}, Subscribers: ${data.subscribers}`);
+        } catch (error) {
+            this.logger.error(`Failed to fetch server config: ${error.message}`);
+        }
     }
 }
 
