@@ -46,19 +46,19 @@ impl GStreamerWebcam {
 
         #[cfg(target_os = "windows")]
         let pipeline_str = format!(
-            "mfvideosrc device-index={} ! \
+            "mfvideosrc ! \
              video/x-raw ! \
              videoscale ! \
-             video/x-raw,width={},height={} ! \
+             video/x-raw,width={},height={},framerate={}/1 ! \
              videoconvert ! \
-             x264enc tune=zerolatency speed-preset=ultrafast bitrate={} key-int-max={} ! \
+             openh264enc bitrate={} gop-size={} ! \
              h264parse config-interval=1 ! \
              video/x-h264,stream-format=byte-stream,alignment=au ! \
              appsink name=sink sync=false emit-signals=true",
-            camera_index,
             width,
             height,
-            15000,
+            fps,
+            15000000,
             fps * 2
         );
 
