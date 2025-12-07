@@ -51,7 +51,7 @@ impl GStreamerWebcam {
              videoscale ! \
              video/x-raw,width={},height={} ! \
              videoconvert ! \
-             mfh264enc bitrate={} gop-size={} ! \
+             x264enc tune=zerolatency speed-preset=ultrafast bitrate={} key-int-max={} ! \
              h264parse config-interval=1 ! \
              video/x-h264,stream-format=byte-stream,alignment=au ! \
              appsink name=sink sync=false emit-signals=true",
