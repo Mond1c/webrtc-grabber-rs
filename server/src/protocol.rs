@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

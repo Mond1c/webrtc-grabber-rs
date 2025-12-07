@@ -12,13 +12,14 @@ use webrtc::{
 pub struct TrackBroadcaster {
     pub id: String,
     pub kind: String,
+    pub mime_type: String,
     tx: broadcast::Sender<Arc<Packet>>,
     read_task: JoinHandle<()>,
     subscribers: Arc<DashMap<String, JoinHandle<()>>>,
 }
 
 impl TrackBroadcaster {
-    pub fn new(source_track: Arc<TrackRemote>, channel_capacity: usize) -> Self {
+    pub fn new(source_track: Arc<TrackRemote>, mime_type: String, channel_capacity: usize) -> Self {
         let id = source_track.id().to_string();
         let kind = source_track.kind().to_string();
 
@@ -31,10 +32,7 @@ impl TrackBroadcaster {
             loop {
                 match source_track.read_rtp().await {
                     Ok((pkt, _)) => {
-                        if tx_clone.send(Arc::new(pkt)).is_err() {
-                            warn!("No subscribers for track {}, stopping broadcast", source_id);
-                            break;
-                        }
+                        let _ = tx_clone.send(Arc::new(pkt));
                     }
                     Err(webrtc::Error::ErrClosedPipe) | Err(webrtc::Error::ErrConnectionClosed) => {
                         trace!("Source track {} closed", source_id);
@@ -51,6 +49,7 @@ impl TrackBroadcaster {
         Self {
             id,
             kind,
+            mime_type,
             tx,
             read_task,
             subscribers: Arc::new(DashMap::new()),

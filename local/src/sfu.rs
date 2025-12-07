@@ -222,21 +222,50 @@ impl Sfu for LocalSfu {
         self.setup_connection_state_handler(&pc, req.publisher_id.clone(), "Publisher")
             .await;
 
+        if let Some(ice_tx) = req.ice_candidate_tx {
+            pc.on_ice_candidate(Box::new(move |candidate| {
+                let ice_tx = ice_tx.clone();
+                Box::pin(async move {
+                    if let Some(candidate) = candidate {
+                        if let Ok(init) = candidate.to_json() {
+                            let _ = ice_tx.send(init);
+                        }
+                    }
+                })
+            }));
+        }
+
         let session = Arc::new(PublisherSession::new(Arc::clone(&pc)));
         let session_clone = Arc::clone(&session);
         let pub_id = req.publisher_id.clone();
         let channel_capacity = self.config.performance.broadcast_channel_capacity;
 
-        pc.on_track(Box::new(move |track, _, _| {
+        pc.on_track(Box::new(move |track, receiver, _| {
             let session = Arc::clone(&session_clone);
             let pub_id = pub_id.clone();
 
             Box::pin(async move {
                 let track_id = track.id();
                 let kind = track.kind();
-                info!("Publisher {} added track: {} ({})", pub_id, track_id, kind);
 
-                let broadcaster = Arc::new(TrackBroadcaster::new(track, channel_capacity));
+                let params = receiver.get_parameters().await;
+                let mime_type = if let Some(codec) = params.codecs.first() {
+                    codec.capability.mime_type.clone()
+                } else {
+                    match kind.to_string().as_str() {
+                        "video" => "video/VP8".to_string(),
+                        "audio" => "audio/opus".to_string(),
+                        _ => format!("{}/unknown", kind),
+                    }
+                };
+
+                info!(
+                    "Publisher {} added track: {} ({}, codec: {})",
+                    pub_id, track_id, kind, mime_type
+                );
+
+                let broadcaster =
+                    Arc::new(TrackBroadcaster::new(track, mime_type, channel_capacity));
                 session.add_broadcaster(track_id.to_string(), broadcaster);
             })
         }));
@@ -322,6 +351,19 @@ impl Sfu for LocalSfu {
         self.setup_connection_state_handler(&pc, req.subscriber_id.clone(), "Subscriber")
             .await;
 
+        if let Some(ice_tx) = req.ice_candidate_tx {
+            pc.on_ice_candidate(Box::new(move |candidate| {
+                let ice_tx = ice_tx.clone();
+                Box::pin(async move {
+                    if let Some(candidate) = candidate {
+                        if let Ok(init) = candidate.to_json() {
+                            let _ = ice_tx.send(init);
+                        }
+                    }
+                })
+            }));
+        }
+
         let broadcasters = pub_session.get_all_broadcasters();
         let mut created_track_ids = Vec::with_capacity(broadcasters.len());
 
@@ -330,7 +372,7 @@ impl Sfu for LocalSfu {
 
             let local_track = Arc::new(TrackLocalStaticRTP::new(
                 RTCRtpCodecCapability {
-                    mime_type: broadcaster.kind.clone(),
+                    mime_type: broadcaster.mime_type.clone(),
                     ..Default::default()
                 },
                 local_track_id.clone(),

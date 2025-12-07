@@ -3,6 +3,10 @@ name = "webrtc-grabber-rs-server"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "webrtc-sfu-server"
+path = "src/main.rs"
+
 [dependencies]
 sfu-core = { path = "../core" }
 sfu-proto = { path = "../proto" }
@@ -15,10 +19,11 @@ axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 dashmap = "5.5"
 webrtc = "0.14"
 chrono = "0.4"
 futures = "0.3"
+thiserror = "1"
